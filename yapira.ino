@@ -37,7 +37,7 @@ void leitura_sensores(int *sensores){//funcao que le os sensores
   sensores[7]=analogRead(A8);
 }
 
-
+ 
 
 /*
   Retorna uma posição estimada do robo em relação a linha.
