@@ -9,11 +9,11 @@ int sensores[8];
 char buffer[20]; //pra debug da leitura dos sensores.
 
 
-#define Kp 0.01 //esses numeros sao "base" pro pid
-#define Kd 0 
+#define Kp 0.4 //provavelmente vai ter que mudar isso conforme aumentar a velocidade do robo
+#define Kd 5
 
-#define velocidade_max 100    //definindo uma velocidade limite pro robo
-#define velocidade_base 60   //definindo uma velocidade inicial
+#define velocidade_max 250    //definindo uma velocidade limite pro robo
+#define velocidade_base 150   //definindo uma velocidade inicial
 #define N_SENSORES 8          //numero de sensores
 
 /*
@@ -37,7 +37,7 @@ void leitura_sensores(int *sensores){//funcao que le os sensores
   sensores[7]=analogRead(A8);
 }
 
- 
+
 
 /*
   Retorna uma posição estimada do robo em relação a linha.
@@ -65,6 +65,8 @@ int posicao(int *sensores,int linha_branca){ //adaptei essa função de uma fun�
 
   for(int i=0;i<N_SENSORES;i++){
     valor = sensores[i];
+    if(valor>1000)
+      valor = 1000;
     if(linha_branca)
       valor = 1000-valor;
 
@@ -73,7 +75,7 @@ int posicao(int *sensores,int linha_branca){ //adaptei essa função de uma fun�
       na_linha=1;
 
     //so calcular a media de alguns valores que passam um certo valor
-    if(valor > 350){
+    if(valor > 200){
       media += (long)(valor)*(i*1000);
       soma += valor;
     }
@@ -104,6 +106,74 @@ void teste_sensores(int *sensores){
 }
 
 
+int debug_posicao(int *sensores,int linha_branca){ //igual a funcao de posicao, mas imprime no monitor serial quando calcula a media
+                                             
+  unsigned char na_linha=0;
+  unsigned long media;
+  unsigned int soma,valor;
+
+  leitura_sensores(sensores);
+  media=0.0;
+  soma=0;
+
+  for(int i=0;i<N_SENSORES;i++){
+    valor = sensores[i];
+    if(valor>1000)
+      valor = 1000;
+    if(linha_branca)
+      valor = 1000-valor;
+
+    //Saber se o robo ve a linha
+    if(valor > 350) 
+      na_linha=1;
+
+    //so calcular a media de alguns valores que passam um certo valor
+    if(valor > 200){ 
+      sprintf(buffer,"(media)_%ld += %ld * %d\t(soma)_%d += %d",media,(long)valor, i*1000, soma, valor);
+      Serial.println(buffer);
+      media += (long)(valor)*(i*1000);
+      soma += valor;
+    }
+
+}
+
+if(!na_linha){//se a ultima leitura foi para a esquerda do sensor retornar 0
+  if(ultimo_valor < (N_SENSORES-1)*500)
+    return 0;
+  else //se foi para a direita, retornar o maximo
+    return (N_SENSORES-1)*1000;
+}
+ultimo_valor=media/soma;
+return ultimo_valor;
+
+}
+
+void debug(int *sensores){  //funcao para checar a leitura dos sensores e a velocidade aplicada nos motores.
+  for(;;){
+//  delay(200);
+  int pos = debug_posicao(sensores,1);
+  sprintf(buffer, "Ultimo_Valor = %d\t",ultimo_valor);
+  Serial.println(buffer);
+  teste_sensores(sensores);
+  int erro = pos - 3500;
+//  int velocidade_motor = Kp * erro; //Sem o Kd
+  int velocidade_motor = Kp * erro + Kd * (erro - ultimo_erro);
+  ultimo_erro = erro;
+  int vel_motor_direito = velocidade_base - velocidade_motor;
+  int vel_motor_esquerdo= velocidade_base + velocidade_motor;
+  if(vel_motor_direito > velocidade_max) vel_motor_direito = velocidade_max; // para evitar valores de velocidade mt altos.
+  if(vel_motor_esquerdo> velocidade_max) vel_motor_esquerdo= velocidade_max; // para evitar valores de velocidade mt altos.
+  if(vel_motor_direito < 0) vel_motor_direito =0; //manter a velocidade positiva.
+  if(vel_motor_esquerdo< 0) vel_motor_esquerdo=0; //manter a velocidade positiva.
+
+  sprintf(buffer, "Vel_motor_esquerdo = %d               ",vel_motor_esquerdo);
+  Serial.println(buffer);
+  sprintf(buffer, "Vel_motor_direito = %d \t", vel_motor_direito);
+  Serial.println(buffer);
+  }
+
+}
+
 void setup() {
 
   pinMode(IN1, OUTPUT);
@@ -121,6 +191,7 @@ void setup() {
 }
 void loop() {
 
+  //debug(sensores); //para checar a leitura dos sensores e velocidade nos motores
 
 //PID
 //teste_sensores(sensores);
@@ -132,7 +203,8 @@ void loop() {
   int erro = pos - 3500;
   //Serial.println(erro);
 //  int velocidade_motor = Kp * erro * Kd * (erro - ultimo_erro);
-  int velocidade_motor = Kp * erro;
+  int velocidade_motor = Kp * erro + Kd * (erro - ultimo_erro);
+//  int velocidade_motor = Kp * erro;
 //  sprintf(buffer, "Erro = %d      Velocidade_motor = %d \t",erro,velocidade_motor);
 //  Serial.println(buffer);
   
